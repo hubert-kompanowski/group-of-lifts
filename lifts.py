@@ -2,17 +2,9 @@ import time
 
 import pygame
 
-from pygame.locals import (
-    K_KP0,
-    K_KP1,
-    K_KP2,
-    K_KP3,
-    K_KP4,
-)
-
 pygame.init()
 pygame.font.init()
-my_font = pygame.font.SysFont('Comic Sans MS', 30)
+my_font = pygame.font.SysFont('Comic Sans MS', 20)
 
 SCREEN_WIDTH = 700
 SCREEN_HEIGHT = 1000
@@ -22,6 +14,8 @@ c2 = (139, 131, 120)  # szary
 c3 = (127, 255, 212)  # turkusowy
 c4 = (156, 102, 31)  # brązowy
 c5 = (139, 115, 85)
+orange = (255, 165, 0)
+red = (255, 0, 0)
 white = (255, 255, 255)
 black = (0, 0, 0)
 turkus = (122, 197, 205)
@@ -122,8 +116,41 @@ buttons = {
     "right_lift": [
         pygame.Rect(left_top, (w, h))
         for *left_top, w, h in right_lift_buttons.values()
-    ]
+    ],
+
 }
+
+action_buttons = {
+    "R_Line": pygame.Rect((int(2.5 * b), 12 * b), (2 * b, 2 * b)),
+    "L_Line": pygame.Rect((int(0.5 * b), 12 * b), (2 * b, 2 * b)),
+    "R_KG": pygame.Rect((int(2.5 * b), 15 * b), (2 * b, 2 * b)),
+    "L_KG": pygame.Rect((int(0.5 * b), 15 * b), (2 * b, 2 * b))
+}
+
+emergency_buttons = {
+    'emerg_left': pygame.Rect((7 * b, 13 * b), (2 * b, b)),
+    'emerg_right': pygame.Rect((10 * b, 13 * b), (2 * b, b)),
+}
+
+action_buttons_draw = {
+    "R Line": [
+        int(2.5 * b), 12 * b, 2 * b, 2 * b,
+    ],
+    "L Line": [
+        int(0.5 * b), 12 * b, 2 * b, 2 * b,
+    ],
+    "R KG": [
+        int(2.5 * b), 15 * b, 2 * b, 2 * b,
+    ],
+    "L KG": [
+        int(0.5 * b), 15 * b, 2 * b, 2 * b,
+    ],
+}
+
+emergency_buttons_draw = [
+    [7 * b, 13 * b, 2 * b, b],
+    [10 * b, 13 * b, 2 * b, b],
+]
 
 
 def unique(list1):
@@ -142,41 +169,76 @@ def draw_button(scr, name, cords):
     scr.blit(my_font.render(name, True, (255, 0, 0)), (x + 18, y + 16))
 
 
+def draw_led(scr, name, cords):
+    border = 2
+    pygame.draw.rect(scr, black, cords)
+    x, y, w, h = cords
+    pygame.draw.rect(scr, c1, (x + border, y + border, w - 2 * border, h - 2 * border))
+    pygame.draw.circle(scr, red, (x + w // 2, y + h // 2), int(0.5 * b - 2))
+    scr.blit(my_font.render(name, True, (0, 0, 0)), (x + 8, y + 16))
+
+
+def draw_action_button(scr, name, cords):
+    border = 2
+    pygame.draw.rect(scr, black, cords)
+    x, y, w, h = cords
+    pygame.draw.rect(scr, c1, (x + border, y + border, w - 2 * border, h - 2 * border))
+    scr.blit(my_font.render(name, True, (255, 0, 0)), (x + 15, y + 40))
+
+
 def draw_stable(scr):
     scr.fill(white)
-    
+
     pygame.draw.rect(scr, c5, building)
-    
+
     for left, right in doors:
         pygame.draw.rect(scr, c1, left)
         pygame.draw.rect(scr, c1, right)
-    
+
     for s in separators:
         pygame.draw.rect(scr, black, s)
-    
+
     for cords in up_down_plates:
         pygame.draw.rect(scr, c2, cords)
-    
+
     for t in triangles_down:
         pygame.draw.polygon(scr, c1, t)
-    
+
     for t in triangles_up:
         pygame.draw.polygon(scr, c1, t)
-    
+
     for l in lift_plates:
         pygame.draw.rect(scr, c2, l)
-    
+
     for f, x in left_lift_buttons.items():
         draw_button(scr, str(f), x)
-    
+
     for f, x in right_lift_buttons.items():
         draw_button(scr, str(f), x)
+
+    for n, c in action_buttons_draw.items():
+        draw_action_button(scr, n, c)
+
+    for c in emergency_buttons_draw:
+        draw_button(scr, 'EMERG', c)
+
+    if show_line_led_left:
+        draw_led(scr, 'Line', (8 * b, 12 * b, b, b))
+
+    if show_line_led_right:
+        draw_led(scr, 'Line', (11 * b, 12 * b, b, b))
+
+    if show_kg_led_left:
+        draw_led(scr, 'KG', (7 * b, 12 * b, b, b))
+
+    if show_kg_led_right:
+        draw_led(scr, 'KG', (10 * b, 12 * b, b, b))
 
 
 class Lift(pygame.sprite.Sprite):
     def __init__(self, index, floors, init_x, init_y):
         super(Lift, self).__init__()
-        
+
         self.state = "no_active"
         self.index = index
         self.floors = floors
@@ -188,33 +250,37 @@ class Lift(pygame.sprite.Sprite):
         self.curr_floor = 0
         self.direction = -1  # -1 up 1 down
         self.dest_floor = 0
-        
+
         self.lift_list = []
         self.waiting_lift_list = []
         self.wait_till = 0
-        
+        self.prev_state = 'no_action'
+
         self.surf = pygame.Surface((self.width, self.height))
         self.surf.fill(self.color)
         self.rect = self.surf.get_rect(
             topleft=(self.x, self.y)
         )
-    
+
     def move(self):
+
         if self.state == "no_active":
+            self.compute_direction()
             if self.curr_floor == self.dest_floor and len(self.lift_list) > 0:
                 i = self.get_closest(self.curr_floor)
                 self.dest_floor = self.lift_list.pop(i)
                 self.compute_direction()
                 self.state = "going"
-            
+
             elif self.curr_floor != self.dest_floor:
                 self.compute_direction()
                 self.state = "going"
-                
+
             elif len(self.lift_list) == 0 and len(self.waiting_lift_list) > 0:
                 self.lift_list.append(self.waiting_lift_list.pop(0))
-        
+
         if self.state == 'break':
+            self.compute_direction()
             if time.time() >= self.wait_till:
                 if len(self.lift_list) > 0:
                     i = self.get_closest(self.curr_floor)
@@ -223,7 +289,7 @@ class Lift(pygame.sprite.Sprite):
                     self.state = "going"
                 else:
                     self.state = 'no_active'
-        
+
         if self.state == "going":
             if len(self.lift_list) > 0 and \
                     abs(self.lift_list[self.get_closest(self.curr_floor)] - self.curr_floor) < \
@@ -231,61 +297,108 @@ class Lift(pygame.sprite.Sprite):
                 self.lift_list.append(self.dest_floor)
                 i = self.get_closest(self.curr_floor)
                 self.dest_floor = self.lift_list.pop(i)
-            elif floor_tops[self.dest_floor] != self.rect.top:
+                self.lift_list = unique(self.lift_list)
+
+            if len(self.waiting_lift_list) > 0 and \
+                    abs(self.waiting_lift_list[
+                            self.get_closest(self.curr_floor, 'waiting_lift_list')] - self.curr_floor) < \
+                    abs(self.dest_floor - self.curr_floor):
+                self.lift_list.append(self.dest_floor)
+                i = self.get_closest(self.curr_floor, 'waiting_lift_list', on_path=True)
+                self.dest_floor = self.waiting_lift_list.pop(i)
+                self.waiting_lift_list = unique(self.waiting_lift_list)
+
+            # if (self.direction == -1 and floor_tops[self.dest_floor] <= self.rect.top) or \
+            #         (self.direction == 1 and floor_tops[self.dest_floor] >= self.rect.top):
+            if floor_tops[self.dest_floor] != self.rect.top:
                 self.rect.move_ip(0, self.direction * 2)
             else:
                 self.curr_floor = self.dest_floor
                 self.state = 'break'
                 self.wait_till = time.time() + 1
-        
-        ###########333
-        # if not self.is_moving and len(self.floors_to_visit) > 0:
-        #     closest_floor = min([abs(self.curr_floor - f) for f in self.floors_to_visit])
-        #     self.dest_floor = closest_floor
-        #
-        # self.compute_direction()
-        #
-        # if self.curr_floor != self.dest_floor:
-        #     self.is_moving = True
-        #     if floor_tops[self.dest_floor] != self.rect.top:
-        #         self.rect.move_ip(0, self.direction * 2)
-        #     else:
-        #         self.curr_floor = self.dest_floor
-        # else:
-        #     if len(self.floors_to_visit) > 0:
-        #         self.floors_to_visit.pop(0)
-        #     if len(self.floors_to_visit) > 0:
-        #         closest_floor = min([abs(self.curr_floor - f) for f in self.floors_to_visit])
-        #         self.dest_floor = closest_floor
-        #     else:
-        #         self.is_moving = False
-    
+
+        if self.state == 'broken_line':
+            if floor_tops[0] > self.rect.top:
+                self.rect.move_ip(0, 2)
+
+    def clear_list(self):
+        to_pop = []
+        for i, el in enumerate(self.waiting_lift_list):
+            if el in self.lift_list:
+                to_pop.append(i)
+        for i in to_pop:
+            self.waiting_lift_list.pop(i)
+        self.compute_direction()
+
     def get_possible_floors_in_curr_direction(self):
         if self.direction == 1:
             return list(range(self.curr_floor, 0, -1))
         elif self.direction == -1:
             return list(range(0, self.curr_floor))
-    
-    def get_closest(self, curr):
+
+    def get_closest(self, curr, list='lift_list', on_path=False):
         i, closest = (None, 1000)
-        for i, el in enumerate(self.lift_list):
-            if abs(el - curr) < abs(closest - curr):
-                i, closest = (i, el)
+        if list == 'lift_list':
+            for i, el in enumerate(self.lift_list):
+                if abs(el - curr) < abs(closest - curr) and (
+                        not on_path or el in self.get_possible_floors_in_curr_direction()):
+                    i, closest = (i, el)
+        elif list == 'waiting_lift_list':
+            for i, el in enumerate(self.waiting_lift_list):
+                if abs(el - curr) < abs(closest - curr) and (
+                        not on_path or el in self.get_possible_floors_in_curr_direction()):
+                    i, closest = (i, el)
         return i
-    
+
     def compute_direction(self):
-        if self.curr_floor > self.dest_floor:
+        # if self.curr_floor > self.dest_floor:
+        if self.rect.top < floor_tops[self.dest_floor]:
             self.direction = 1
-        elif self.curr_floor < self.dest_floor:
+        # elif self.curr_floor < self.dest_floor:
+        elif self.rect.top > floor_tops[self.dest_floor]:
+
             self.direction = -1
-    
+        # else:
+        #     raise Exception()
+
     def update_color(self):
-        if self.state != 'no_active':
-            self.color = turkus
-            self.surf.fill(self.color)
-        else:
+        if self.state in ['no_active', 'break']:
             self.color = yellow
             self.surf.fill(self.color)
+        elif self.state == "emergency":
+            self.color = red
+            if int(time.time() * 10) % 3 == 0:
+                self.surf.fill(red)
+            else:
+                self.surf.fill(yellow)
+        elif self.state == 'broken_line':
+            self.color = black
+            self.surf.fill(self.color)
+        elif self.state == 'overload':
+            self.color = orange
+            self.surf.fill(self.color)
+        else:
+            self.color = turkus
+            self.surf.fill(self.color)
+
+    def emergency(self):
+        if self.state != 'broken_line':
+            if self.state != 'emergency':
+                self.prev_state = self.state
+                self.state = 'emergency'
+            else:
+                self.state = self.prev_state
+
+    def overload(self):
+        if self.state != 'broken_line':
+            if self.state != 'overload':
+                self.prev_state = self.state
+                self.state = 'overload'
+            else:
+                self.state = self.prev_state
+
+    def break_line(self):
+        self.state = 'broken_line'
 
 
 def button_read_action(pos):
@@ -294,6 +407,20 @@ def button_read_action(pos):
             if btn.collidepoint(pos):
                 return btn_type, idx
     return None, None
+
+
+def button_read_action_action(pos):
+    for btn_type, btn in action_buttons.items():
+        if btn.collidepoint(pos):
+            return btn_type
+    return None
+
+
+def button_read_action_emerg(pos):
+    for btn_type, btn in emergency_buttons.items():
+        if btn.collidepoint(pos):
+            return btn_type
+    return None
 
 
 def xor(a, b):
@@ -306,35 +433,51 @@ class LiftsManager:
         self.r_lift = Lift(1, 5, int(10.25 * b), 9 * b)
         self.main_list = []
         self.waiting_list = []
-    
+
     def update_dest(self, b_type, i):
-        if b_type == 'left_lift':
-            if i in self.l_lift.get_possible_floors_in_curr_direction():
-                self.l_lift.lift_list.append(i)
-                self.l_lift.lift_list = unique(self.l_lift.lift_list)
+        if b_type == 'left_lift' and self.l_lift.state != 'emergency':
+            if i not in self.l_lift.lift_list and i not in self.l_lift.waiting_lift_list:
+                if i in self.l_lift.get_possible_floors_in_curr_direction():
+                    self.l_lift.lift_list.append(i)
+                    self.l_lift.lift_list = unique(self.l_lift.lift_list)
+                else:
+                    self.l_lift.waiting_lift_list.append(i)
+                    self.l_lift.lift_list = unique(self.l_lift.lift_list)
             else:
-                self.l_lift.waiting_lift_list.append(i)
-                self.l_lift.lift_list = unique(self.l_lift.lift_list)
-        
-        if b_type == 'right_lift':
-            if i in self.r_lift.get_possible_floors_in_curr_direction():
-                self.r_lift.lift_list.append(i)
-                self.r_lift.lift_list = unique(self.r_lift.lift_list)
+                return
+
+        if b_type == 'right_lift' and self.r_lift.state != 'emergency':
+            if i not in self.r_lift.lift_list and i not in self.r_lift.waiting_lift_list:
+                if i in self.r_lift.get_possible_floors_in_curr_direction():
+                    self.r_lift.lift_list.append(i)
+                    self.r_lift.lift_list = unique(self.r_lift.lift_list)
+                else:
+                    self.r_lift.waiting_lift_list.append(i)
+                    self.r_lift.lift_list = unique(self.r_lift.lift_list)
             else:
-                self.r_lift.waiting_lift_list.append(i)
-                self.r_lift.lift_list = unique(self.r_lift.lift_list)
-        
+                return
+
         if b_type == 'buttons_down' or b_type == 'buttons_up':
             if b_type == 'buttons_down':
                 i = i + 1
-            
+
             self.main_list.append(i)
-    
+        self.l_lift.lift_list = unique(self.l_lift.lift_list)
+        self.l_lift.waiting_lift_list = unique(self.l_lift.waiting_lift_list)
+        self.r_lift.lift_list = unique(self.r_lift.lift_list)
+        self.r_lift.waiting_lift_list = unique(self.r_lift.waiting_lift_list)
+        self.main_list = unique(self.main_list)
+        self.waiting_list = unique(self.waiting_list)
+        self.l_lift.clear_list()
+        self.r_lift.clear_list()
+
     def update(self):
+        self.l_lift.clear_list()
+        self.r_lift.clear_list()
         if len(self.main_list) > 0 or len(self.waiting_list) > 0:
             self.main_list = unique(self.main_list)
             self.waiting_list = unique(self.waiting_list)
-            
+
             to_del_id = []
             for idx, el in enumerate(self.waiting_list):
                 if self.l_lift.state == 'no_active' and self.r_lift.state == 'no_active':
@@ -348,7 +491,7 @@ class LiftsManager:
                         self.r_lift.lift_list.append(el)
                         to_del_id.append(idx)
                         break
-                
+
                 elif xor(self.l_lift.state != 'no_active', self.r_lift.state != 'no_active'):
                     if self.l_lift.state == 'brake' and self.l_lift.curr_floor == el or \
                             self.r_lift.state == 'brake' and self.r_lift.curr_floor == el:
@@ -370,13 +513,13 @@ class LiftsManager:
                         self.r_lift.lift_list.append(el)
                         to_del_id.append(idx)
                         break
-                
+
                 elif self.l_lift.state != 'no_active' and self.r_lift.state != 'no_active':
                     if self.l_lift.state == 'brake' and self.l_lift.curr_floor == el or \
                             self.r_lift.state == 'brake' and self.r_lift.curr_floor == el:
                         to_del_id.append(idx)
                         break
-                    
+
                     elif self.l_lift.state != 'no_active' and el in self.l_lift.get_possible_floors_in_curr_direction() and \
                             self.r_lift.state != 'no_active' and el in self.r_lift.get_possible_floors_in_curr_direction():
                         dist_left = abs(self.l_lift.curr_floor - el)
@@ -390,11 +533,11 @@ class LiftsManager:
                             to_del_id.append(idx)
                             break
                     elif self.l_lift.state != 'no_active' and el in self.l_lift.get_possible_floors_in_curr_direction():
-                        self.r_lift.lift_list.append(el)
+                        self.l_lift.waiting_lift_list.append(el)  # może do waiting?
                         to_del_id.append(idx)
                         break
                     elif self.r_lift.state != 'no_active' and el in self.r_lift.get_possible_floors_in_curr_direction():
-                        self.r_lift.lift_list.append(el)
+                        self.r_lift.waiting_lift_list.append(el)  # może do waiting?
                         to_del_id.append(idx)
                         break
             for i in to_del_id:
@@ -403,7 +546,7 @@ class LiftsManager:
             if len(self.main_list) > 0:
                 el = self.main_list.pop(0)
                 to_del = None
-                
+
                 if self.l_lift.state != 'no_active' and self.r_lift.state != 'no_active':
                     dist_left = abs(self.l_lift.curr_floor - el)
                     dist_right = abs(self.r_lift.curr_floor - el)
@@ -413,7 +556,7 @@ class LiftsManager:
                     else:
                         self.r_lift.lift_list.append(el)
                         to_del = el
-                
+
                 elif xor(self.l_lift.state != 'no_active', self.r_lift.state != 'no_active'):
                     if self.l_lift.state == 'brake' and self.l_lift.curr_floor == el or \
                             self.r_lift.state == 'brake' and self.r_lift.curr_floor == el:
@@ -430,12 +573,12 @@ class LiftsManager:
                     elif self.r_lift.state == 'no_active':
                         self.r_lift.lift_list.append(el)
                         to_del = el
-                
+
                 elif self.l_lift.state != 'no_active' and self.r_lift.state != 'no_active':
                     if self.l_lift.state == 'brake' and self.l_lift.curr_floor == el or \
                             self.r_lift.state == 'brake' and self.r_lift.curr_floor == el:
                         to_del = el
-                    
+
                     elif self.l_lift.state != 'no_active' and el in self.l_lift.get_possible_floors_in_curr_direction() and \
                             self.r_lift.state != 'no_active' and el in self.r_lift.get_possible_floors_in_curr_direction():
                         dist_left = abs(self.l_lift.curr_floor - el)
@@ -456,43 +599,74 @@ class LiftsManager:
                     del to_del
                 else:
                     self.waiting_list.append(el)
-        
+
         self.l_lift.lift_list = unique(self.l_lift.lift_list)
         self.r_lift.lift_list = unique(self.r_lift.lift_list)
-    
+
     def draw(self, scr):
         self.l_lift.update_color()
         self.r_lift.update_color()
         scr.blit(self.l_lift.surf, self.l_lift.rect)
         scr.blit(self.r_lift.surf, self.r_lift.rect)
-    
+
     def move(self):
         self.l_lift.move()
         self.r_lift.move()
 
+
+show_line_led_left = False
+show_kg_led_left = False
+show_line_led_right = False
+show_kg_led_right = False
 
 lifts_manager = LiftsManager()
 pos = (0, 0)
 run = True
 while run:
     clock.tick(30)
-    
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             run = False
         if event.type == pygame.MOUSEBUTTONUP:
             position = pygame.mouse.get_pos()
+
             btn_type, idx = button_read_action(position)
             if btn_type is not None:
                 lifts_manager.update_dest(btn_type, idx)
-    
+
+            btn_type = button_read_action_action(position)
+            if btn_type is not None:
+                if btn_type == 'L_Line':
+                    lifts_manager.l_lift.break_line()
+                    show_line_led_left = True
+                if btn_type == 'R_Line':
+                    lifts_manager.r_lift.break_line()
+                    show_line_led_right = True
+                if btn_type == 'L_KG':
+                    if lifts_manager.l_lift.state in ['break', 'no_active', 'overload']:
+                        lifts_manager.l_lift.overload()
+                        show_kg_led_left = not show_kg_led_left
+                if btn_type == 'R_KG':
+                    if lifts_manager.r_lift.state in ['break', 'no_active', 'overload']:
+                        lifts_manager.r_lift.overload()
+                        show_kg_led_right = not show_kg_led_right
+
+            btn_type = button_read_action_emerg(position)
+            if btn_type is not None:
+                if btn_type == 'emerg_left':
+                    lifts_manager.l_lift.emergency()
+                if btn_type == 'emerg_right':
+                    lifts_manager.r_lift.emergency()
+
     lifts_manager.update()
     lifts_manager.move()
-    
+
     draw_stable(screen)
-    
+
     lifts_manager.draw(screen)
     # print(lifts_manager.main_list, lifts_manager.l_lift.lift_list, lifts_manager.r_lift.lift_list)
     # print(lifts_manager.waiting_list, lifts_manager.l_lift.waiting_lift_list, lifts_manager.r_lift.waiting_lift_list)
     # print(lifts_manager.l_lift.state, lifts_manager.r_lift.state)
+    # print(lifts_manager.l_lift.dest_floor, lifts_manager.r_lift.dest_floor)
     pygame.display.flip()
