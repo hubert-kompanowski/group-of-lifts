@@ -291,18 +291,35 @@ class Lift(pygame.sprite.Sprite):
                     self.state = 'no_active'
 
         if self.state == "going":
+
             if len(self.lift_list) > 0 and \
                     abs(self.lift_list[self.get_closest(self.curr_floor)] - self.curr_floor) < \
-                    abs(self.dest_floor - self.curr_floor):
+                    abs(self.dest_floor - self.curr_floor) and \
+                    self.lift_list[self.get_closest(self.curr_floor)] in \
+                    self.get_possible_floors_in_curr_direction() and \
+                    (
+                            (self.direction == -1 and self.lift_list[self.get_closest(self.curr_floor, on_path=True)] < self.dest_floor)
+                            or
+                            (self.direction == 1 and self.lift_list[self.get_closest(self.curr_floor, on_path=True)] > self.dest_floor)
+                    ):
                 self.lift_list.append(self.dest_floor)
-                i = self.get_closest(self.curr_floor)
+                i = self.get_closest(self.curr_floor, on_path=True)
                 self.dest_floor = self.lift_list.pop(i)
                 self.lift_list = unique(self.lift_list)
+
 
             if len(self.waiting_lift_list) > 0 and \
                     abs(self.waiting_lift_list[
                             self.get_closest(self.curr_floor, 'waiting_lift_list')] - self.curr_floor) < \
-                    abs(self.dest_floor - self.curr_floor):
+                    abs(self.dest_floor - self.curr_floor) and \
+                    self.waiting_lift_list[self.get_closest(self.curr_floor, 'waiting_lift_list')] in \
+                    self.get_possible_floors_in_curr_direction() and \
+                    (
+                            (self.direction == -1 and self.waiting_lift_list[self.get_closest(self.curr_floor, 'waiting_lift_list', on_path=True)] < self.dest_floor)
+                            or
+                            (self.direction == 1 and self.waiting_lift_list[self.get_closest(self.curr_floor, 'waiting_lift_list', on_path=True)] > self.dest_floor)
+                    ):
+
                 self.lift_list.append(self.dest_floor)
                 i = self.get_closest(self.curr_floor, 'waiting_lift_list', on_path=True)
                 self.dest_floor = self.waiting_lift_list.pop(i)
@@ -332,23 +349,23 @@ class Lift(pygame.sprite.Sprite):
 
     def get_possible_floors_in_curr_direction(self):
         if self.direction == 1:
-            return list(range(self.curr_floor, 0, -1))
+            return list(range(self.curr_floor, -1, -1))
         elif self.direction == -1:
             return list(range(0, self.curr_floor))
 
     def get_closest(self, curr, list='lift_list', on_path=False):
-        i, closest = (None, 1000)
+        idx, closest = (None, 1000)
         if list == 'lift_list':
             for i, el in enumerate(self.lift_list):
                 if abs(el - curr) < abs(closest - curr) and (
                         not on_path or el in self.get_possible_floors_in_curr_direction()):
-                    i, closest = (i, el)
+                    idx, closest = (i, el)
         elif list == 'waiting_lift_list':
             for i, el in enumerate(self.waiting_lift_list):
                 if abs(el - curr) < abs(closest - curr) and (
                         not on_path or el in self.get_possible_floors_in_curr_direction()):
-                    i, closest = (i, el)
-        return i
+                    idx, closest = (i, el)
+        return idx
 
     def compute_direction(self):
         # if self.curr_floor > self.dest_floor:
@@ -665,8 +682,5 @@ while run:
     draw_stable(screen)
 
     lifts_manager.draw(screen)
-    # print(lifts_manager.main_list, lifts_manager.l_lift.lift_list, lifts_manager.r_lift.lift_list)
-    # print(lifts_manager.waiting_list, lifts_manager.l_lift.waiting_lift_list, lifts_manager.r_lift.waiting_lift_list)
-    # print(lifts_manager.l_lift.state, lifts_manager.r_lift.state)
-    # print(lifts_manager.l_lift.dest_floor, lifts_manager.r_lift.dest_floor)
+
     pygame.display.flip()
